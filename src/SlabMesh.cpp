@@ -1451,6 +1451,8 @@ void SlabMesh::EvaluateEdgeCollapseCost(unsigned eid){
     Matrix4d inverse_A_matrix = edges[eid].second->slab_A.Inverse();
     Wm4::Vector4d lamdar;
     double coll_cost = 0.0;
+    bool anchored = false;
+    double anchored_priority = 0.0;
 
     if ((vertices[v1].second->saved_vertex && !vertices[v2].second->saved_vertex) ||
         (vertices[v2].second->saved_vertex && !vertices[v1].second->saved_vertex))
@@ -1462,6 +1464,15 @@ void SlabMesh::EvaluateEdgeCollapseCost(unsigned eid){
             mid_sphere = vertices[v2].second->sphere;
 
         lamdar = Vector4d(mid_sphere.center.X(), mid_sphere.center.Y(), mid_sphere.center.Z(), mid_sphere.radius);
+
+        // Edge with one selected point (anchor): the merged sphere is the anchor, and the edge is ordered in the
+        // collapse queue by the distance between the anchor and the other vertex, so that every selected point
+        // absorbs its own neighbourhood of the medial axis first. Ordering these edges by the quadric error of the
+        // anchor sphere would penalise the large balls, whose sphere fits the neighbouring slabs badly: their
+        // neighbourhood is then absorbed by the smaller anchors and the large ball is left with a single edge.
+        anchored = true;
+        Sphere other = vertices[v1].second->saved_vertex ? vertices[v2].second->sphere : vertices[v1].second->sphere;
+        anchored_priority = (other.center - mid_sphere.center).SquaredLength();
     }
     else if ((vertices[v1].second->saved_vertex && vertices[v2].second->saved_vertex))
     {
@@ -1650,6 +1661,9 @@ void SlabMesh::EvaluateEdgeCollapseCost(unsigned eid){
         delete [] collapse_costs;
         delete [] min_sphere;
     }
+
+    if (anchored)
+        coll_cost = anchored_priority;
 
     switch(hyperbolic_weight_type)
     {
